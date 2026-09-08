@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <meta name="theme-color" content="#1976d2">
+  <title>Skaner produktów</title>
+  <style>
+    *{box-sizing:border-box}
+    body{margin:0;padding:18px;font-family:Arial,sans-serif;background:#f5f5f5;color:#222;text-align:center}
+    h1{margin:5px 0 8px;font-size:27px}
+    .opis{margin:0 0 15px;color:#666;font-size:15px}
+    #kamera{width:100%;max-width:500px;margin:0 auto;background:#000;border-radius:14px;overflow:hidden;position:relative}
+    #video{display:block;width:100%;height:auto;min-height:260px;object-fit:cover;background:#000}
+    .ramka{position:absolute;left:10%;right:10%;top:35%;height:30%;border:3px solid #fff;border-radius:8px;pointer-events:none;box-shadow:0 0 0 9999px rgba(0,0,0,.15)}
+    button{width:100%;max-width:500px;margin:14px auto 0;padding:16px;border:0;border-radius:12px;font-size:19px;font-weight:bold;cursor:pointer}
+    #start{background:#1976d2;color:#fff}
+    #stop{background:#777;color:#fff;display:none}
+    #status{max-width:500px;margin:15px auto 0;padding:12px;border-radius:10px;background:#fff;font-size:16px}
+    #wynik{display:none;max-width:500px;margin:15px auto 0;padding:16px;border-radius:12px;background:#fff;text-align:left}
+    #produkt{font-size:20px;font-weight:bold;margin-bottom:10px}
+    .wiersz{margin:6px 0;font-size:16px}
+    .blad{color:#c62828;font-weight:bold}
+    .ok{color:#16803c;font-weight:bold}
+    #ean{font-family:monospace;font-size:17px}
+  </style>
+</head>
+<body>
+  <h1>📷 Skaner produktów</h1>
+  <div class="opis">Skieruj aparat na kod kreskowy EAN</div>
+
+  <div id="kamera">
+    <video id="video" playsinline muted></video>
+    <div class="ramka"></div>
+  </div>
+
+  <button id="start">URUCHOM APARAT</button>
+  <button id="stop">ZATRZYMAJ APARAT</button>
+
+  <div id="status">Naciśnij „URUCHOM APARAT”.</div>
+
+  <div id="wynik">
+    <div id="produkt">-</div>
+    <div class="wiersz">EAN: <span id="ean">-</span></div>
+    <div class="wiersz">Ilość: <span id="ilosc">-</span></div>
+    <div class="wiersz">Arkusz: <span id="arkusz">-</span></div>
+  </div>
+
+  <script src="https://unpkg.com/@zxing/browser@latest"></script>
+  <script>
+    // ADRES TWOJEJ APLIKACJI WEB APP APPS SCRIPT
+    // Wstawimy go po otrzymaniu adresu wdrożenia.
+    const APPS_SCRIPT_URL = "TU_WSTAWIMY_ADRES_APPS_SCRIPT";
+
+    let codeReader = null;
+    let controls = null;
+    let ostatniEAN = "";
+    let czasOstatniegoSkanu = 0;
+
+    const video = document.getElementById("video");
+    const startButton = document.getElementById("start");
+    const stopButton = document.getElementById("stop");
+    const status = document.getElementById("status");
+    const wynik = document.getElementById("wynik");
+    const produkt = document.getElementById("produkt");
+    const eanElement = document.getElementById("ean");
+    const ilosc = document.getElementById("ilosc");
+    const arkusz = document.getElementById("arkusz");
+
+    function ustawStatus(tekst, blad=false){
+      status.textContent = tekst;
+      status.className = blad ? "blad" : "";
+    }
+
+    function pokazWynik(dane){
+      wynik.style.display = "block";
+      produkt.textContent = dane.produkt || "Produkt nierozpoznany";
+      eanElement.textContent = dane.ean || "-";
+      ilosc.textContent = dane.ilosc !== undefined ? dane.ilosc : "-";
+      arkusz.textContent = dane.arkusz || "-";
+    }
+
+    function wyczyscWynik(){
+      wynik.style.display = "none";
+      produkt.textContent = "-";
+      eanElement.textContent = "-";
+      ilosc.textContent = "-";
+      arkusz.textContent = "-";
+    }
+
+    function uruchomSkaner(){
+      wyczyscWynik();
+      if(typeof ZXingBrowser === "undefined"){
+        ustawStatus("Nie udało się załadować biblioteki skanera.", true);
+        return;
+      }
+
+      ustawStatus("Uruchamiam aparat...");
+      try{
+        codeReader = new ZXingBrowser.BrowserMultiFormatReader();
+        codeReader.decodeFromConstraints(
+          {video:{facingMode:{ideal:"environment"}},audio:false},
+          video,
+          (result, error, ctl) => {
+            controls = ctl;
+            if(!result) return;
+
+            const tekst = result.getText();
+            const ean = tekst.replace(/\D/g, "");
+            if(!ean) return;
+
+            const teraz = Date.now();
+            if(ean === ostatniEAN && teraz - czasOstatniegoSkanu < 2000) return;
+            ostatniEAN = ean;
+            czasOstatniegoSkanu = teraz;
+
+            obsluzEAN(ean);
+          }
+        ).then(()=>{
+          startButton.style.display = "none";
+          stopButton.style.display = "block";
+          ustawStatus("Aparat działa. Skieruj go na kod EAN.");
+        }).catch(error=>{
+          console.error(error);
+          ustawStatus("Nie udało się uruchomić aparatu. Sprawdź uprawnienia do aparatu.", true);
+        });
+      }catch(error){
+        console.error(error);
+        ustawStatus("Błąd uruchamiania skanera.", true);
+      }
+    }
+
+    function zatrzymajSkaner(){
+      try{
+        if(controls){controls.stop();controls=null;}
+        if(codeReader) codeReader.reset();
+      }catch(error){console.error(error)}
+      video.srcObject = null;
+      startButton.style.display = "block";
+      stopButton.style.display = "none";
+      ustawStatus("Aparat zatrzymany.");
+    }
+
+    function obsluzEAN(ean){
+      ustawStatus("Odczytano EAN: " + ean + ". Zapisuję do arkusza...");
+      if(navigator.vibrate) navigator.vibrate(100);
+
+      if(APPS_SCRIPT_URL.indexOf("TU_WSTAWIMY") === 0){
+        ustawStatus("Skaner działa, ale trzeba jeszcze podłączyć arkusz.", true);
+        return;
+      }
+
+      // JSONP pozwala połączyć zewnętrzną stronę z Apps Script bez problemu CORS.
+      const callbackName = "wynikSkanera_" + Date.now();
+      const script = document.createElement("script");
+      const timeout = setTimeout(()=>{
+        cleanup();
+        ustawStatus("Brak odpowiedzi z arkusza. Sprawdź połączenie.", true);
+      }, 15000);
+
+      function cleanup(){
+        clearTimeout(timeout);
+        delete window[callbackName];
+        script.remove();
+      }
+
+      window[callbackName] = function(dane){
+        cleanup();
+        if(dane && dane.error){
+          ustawStatus("Błąd: " + dane.error, true);
+          return;
+        }
+        pokazWynik(dane || {});
+        ustawStatus("✓ Produkt został zapisany.");
+      };
+
+      script.onerror = function(){
+        cleanup();
+        ustawStatus("Nie udało się połączyć z arkuszem.", true);
+      };
+
+      script.src = APPS_SCRIPT_URL + "?ean=" + encodeURIComponent(ean) + "&callback=" + encodeURIComponent(callbackName);
+      document.body.appendChild(script);
+    }
+
+    startButton.addEventListener("click", uruchomSkaner);
+    stopButton.addEventListener("click", zatrzymajSkaner);
+  </script>
+</body>
+</html>
