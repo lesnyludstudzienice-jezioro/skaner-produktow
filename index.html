@@ -7,69 +7,117 @@
   <title>Skaner produktów</title>
   <style>
     *{box-sizing:border-box}
-    body{margin:0;padding:18px;font-family:Arial,sans-serif;background:#f5f5f5;color:#222;text-align:center}
-    h1{margin:5px 0 8px;font-size:27px}
-    .opis{margin:0 0 15px;color:#666;font-size:15px}
+    body{margin:0;padding:16px;font-family:Arial,sans-serif;background:#f5f5f5;color:#222;text-align:center}
+    h1{margin:4px 0 6px;font-size:27px}
+    .opis{margin:0 0 14px;color:#666;font-size:15px}
     #kamera{width:100%;max-width:500px;margin:0 auto;background:#000;border-radius:14px;overflow:hidden;position:relative}
     #video{display:block;width:100%;height:auto;min-height:260px;object-fit:cover;background:#000}
-    .ramka{position:absolute;left:10%;right:10%;top:35%;height:30%;border:3px solid #fff;border-radius:8px;pointer-events:none;box-shadow:0 0 0 9999px rgba(0,0,0,.15)}
-    button{width:100%;max-width:500px;margin:14px auto 0;padding:16px;border:0;border-radius:12px;font-size:19px;font-weight:bold;cursor:pointer}
+    .ramka{position:absolute;left:8%;right:8%;top:34%;height:32%;border:3px solid #fff;border-radius:8px;pointer-events:none;box-shadow:0 0 0 9999px rgba(0,0,0,.15)}
+    .panel{width:100%;max-width:500px;margin:12px auto 0;background:#fff;border-radius:12px;padding:12px;text-align:left}
+    label{display:block;font-weight:bold;margin-bottom:7px;font-size:16px}
+    #iloscInput{width:100%;padding:14px;border:1px solid #bbb;border-radius:10px;font-size:21px;text-align:center}
+    .tryb{display:flex;gap:8px;margin-top:10px}
+    .tryb button{flex:1;margin:0;padding:12px 8px;font-size:15px;border:2px solid #bbb;background:#fff;color:#333}
+    .tryb button.aktywny{border-color:#1976d2;background:#e8f1fb;color:#1976d2}
+    button{width:100%;max-width:500px;margin:12px auto 0;padding:15px;border:0;border-radius:12px;font-size:18px;font-weight:bold;cursor:pointer}
+    button:disabled{opacity:.45;cursor:default}
     #start{background:#1976d2;color:#fff}
     #stop{background:#777;color:#fff;display:none}
-    #status{max-width:500px;margin:15px auto 0;padding:12px;border-radius:10px;background:#fff;font-size:16px}
-    #wynik{display:none;max-width:500px;margin:15px auto 0;padding:16px;border-radius:12px;background:#fff;text-align:left}
-    #produkt{font-size:20px;font-weight:bold;margin-bottom:10px}
+    #zdjecie{background:#6a1b9a;color:#fff}
+    #trigger{background:#16803c;color:#fff;display:none;font-size:21px;padding:19px}
+    #nowy{background:#555;color:#fff;display:none}
+    #status{max-width:500px;margin:12px auto 0;padding:12px;border-radius:10px;background:#fff;font-size:16px}
+    #wynik{display:none;max-width:500px;margin:12px auto 0;padding:16px;border-radius:12px;background:#fff;text-align:left}
+    #produkt{font-size:19px;font-weight:bold;margin-bottom:10px}
     .wiersz{margin:6px 0;font-size:16px}
     .blad{color:#c62828;font-weight:bold}
     .ok{color:#16803c;font-weight:bold}
     #ean{font-family:monospace;font-size:17px}
+    #gotowy{display:none;max-width:500px;margin:10px auto 0;padding:12px;border-radius:10px;background:#fff3cd;font-weight:bold}
   </style>
 </head>
 <body>
   <h1>📷 Skaner produktów</h1>
-  <div class="opis">Skieruj aparat na kod kreskowy EAN</div>
+  <div class="opis">Odczytaj kod EAN, wybierz ilość i zapisz pobranie.</div>
 
   <div id="kamera">
     <video id="video" playsinline muted></video>
     <div class="ramka"></div>
   </div>
 
+  <div class="panel">
+    <label for="iloscInput">Ilość sztuk / jednostek</label>
+    <input id="iloscInput" type="number" inputmode="decimal" min="0.01" step="1" value="1">
+
+    <div class="tryb">
+      <button id="trybAuto" class="aktywny">AUTO</button>
+      <button id="trybTrigger">WYZWALACZ</button>
+    </div>
+  </div>
+
   <button id="start">URUCHOM APARAT</button>
   <button id="stop">ZATRZYMAJ APARAT</button>
+  <button id="zdjecie">🖼️ WYBIERZ ZDJĘCIE Z TELEFONU</button>
+  <input id="plikZdjecia" type="file" accept="image/*" style="display:none">
+  <button id="trigger" disabled>🎯 ZAPISZ ODCZYTANY KOD</button>
+  <button id="nowy">NOWY SKAN</button>
 
+  <div id="gotowy">Kod odczytany. Naciśnij „ZAPISZ ODCZYTANY KOD”.</div>
   <div id="status">Naciśnij „URUCHOM APARAT”.</div>
 
   <div id="wynik">
     <div id="produkt">-</div>
     <div class="wiersz">EAN: <span id="ean">-</span></div>
-    <div class="wiersz">Ilość: <span id="ilosc">-</span></div>
+    <div class="wiersz">Ilość zapisana: <span id="ilosc">-</span></div>
     <div class="wiersz">Arkusz: <span id="arkusz">-</span></div>
+    <div class="wiersz">Data: <span id="data">-</span></div>
   </div>
 
   <script src="https://unpkg.com/@zxing/browser@latest"></script>
   <script>
-    // ADRES TWOJEJ APLIKACJI WEB APP APPS SCRIPT
-    // Wstawimy go po otrzymaniu adresu wdrożenia.
     const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzwhMXZoV3auxdb_mz1PqHQOg4-vsS6q1pLxUg9OwWett9gpN4NzGeClkYeB8zez7Jl9g/exec";
 
     let codeReader = null;
     let controls = null;
-    let ostatniEAN = "";
-    let czasOstatniegoSkanu = 0;
+    let tryb = "auto";
+    let ostatniOdczytEAN = "";
+    let oczekujacyEAN = "";
+    let blokadaEAN = "";
+    let zapisWToku = false;
+    let oczekiwanieNaNowySkan = false;
+    let aparatZatrzymanyPoSkaniu = false;
 
     const video = document.getElementById("video");
     const startButton = document.getElementById("start");
     const stopButton = document.getElementById("stop");
+    const zdjecieButton = document.getElementById("zdjecie");
+    const plikZdjecia = document.getElementById("plikZdjecia");
+    const triggerButton = document.getElementById("trigger");
+    const nowyButton = document.getElementById("nowy");
+    const trybAutoButton = document.getElementById("trybAuto");
+    const trybTriggerButton = document.getElementById("trybTrigger");
+    const iloscInput = document.getElementById("iloscInput");
     const status = document.getElementById("status");
+    const gotowy = document.getElementById("gotowy");
     const wynik = document.getElementById("wynik");
     const produkt = document.getElementById("produkt");
     const eanElement = document.getElementById("ean");
     const ilosc = document.getElementById("ilosc");
     const arkusz = document.getElementById("arkusz");
+    const data = document.getElementById("data");
 
     function ustawStatus(tekst, blad=false){
       status.textContent = tekst;
       status.className = blad ? "blad" : "";
+    }
+
+    function pobierzIlosc(){
+      let wartosc = parseFloat(String(iloscInput.value).replace(",", "."));
+      if(!isFinite(wartosc) || wartosc <= 0){
+        wartosc = 1;
+        iloscInput.value = "1";
+      }
+      return Math.round(wartosc * 100) / 100;
     }
 
     function pokazWynik(dane){
@@ -78,6 +126,7 @@
       eanElement.textContent = dane.ean || "-";
       ilosc.textContent = dane.ilosc !== undefined ? dane.ilosc : "-";
       arkusz.textContent = dane.arkusz || "-";
+      data.textContent = dane.data || "-";
     }
 
     function wyczyscWynik(){
@@ -86,40 +135,86 @@
       eanElement.textContent = "-";
       ilosc.textContent = "-";
       arkusz.textContent = "-";
+      data.textContent = "-";
+    }
+
+    function ustawTryb(nowyTryb){
+      tryb = nowyTryb;
+      trybAutoButton.classList.toggle("aktywny", tryb === "auto");
+      trybTriggerButton.classList.toggle("aktywny", tryb === "trigger");
+
+      if(tryb === "trigger"){
+        triggerButton.style.display = "block";
+        triggerButton.disabled = !oczekujacyEAN || zapisWToku;
+        gotowy.style.display = oczekujacyEAN ? "block" : "none";
+        ustawStatus(oczekujacyEAN ? "Kod gotowy do zapisania. Ustaw ilość i naciśnij wyzwalacz." : "Tryb WYZWALACZ. Skieruj aparat na kod.");
+      } else {
+        triggerButton.style.display = "none";
+        gotowy.style.display = "none";
+        ustawStatus("Tryb AUTO. Po odczytaniu kod zostanie zapisany jeden raz.");
+      }
     }
 
     function uruchomSkaner(){
       wyczyscWynik();
+      oczekujacyEAN = "";
+      blokadaEAN = "";
+      ostatniOdczytEAN = "";
+      zapisWToku = false;
+
       if(typeof ZXingBrowser === "undefined"){
         ustawStatus("Nie udało się załadować biblioteki skanera.", true);
         return;
       }
 
       ustawStatus("Uruchamiam aparat...");
+
       try{
         codeReader = new ZXingBrowser.BrowserMultiFormatReader();
+
         codeReader.decodeFromConstraints(
           {video:{facingMode:{ideal:"environment"}},audio:false},
           video,
           (result, error, ctl) => {
             controls = ctl;
-            if(!result) return;
+            if(!result || zapisWToku || oczekiwanieNaNowySkan) return;
 
             const tekst = result.getText();
             const ean = tekst.replace(/\D/g, "");
             if(!ean) return;
 
-            const teraz = Date.now();
-            if(ean === ostatniEAN && teraz - czasOstatniegoSkanu < 2000) return;
-            ostatniEAN = ean;
-            czasOstatniegoSkanu = teraz;
+            // W trybie AUTO ten sam kod pozostaje zablokowany,
+            // dopóki użytkownik nie przejdzie do innego kodu.
+            if(tryb === "auto" && ean === blokadaEAN) return;
 
-            obsluzEAN(ean);
+            oczekujacyEAN = ean;
+            ostatniOdczytEAN = ean;
+
+            if(tryb === "trigger"){
+              triggerButton.disabled = false;
+              gotowy.style.display = "block";
+              ustawStatus("Odczytano EAN: " + ean + ". Ustaw ilość i naciśnij wyzwalacz.");
+              if(navigator.vibrate) navigator.vibrate(70);
+              return;
+            }
+
+            // AUTO: zatrzymujemy odczyt kamery natychmiast po rozpoznaniu kodu.
+            // Dzięki temu jeden kod nie może zostać zapisany kilka razy.
+            blokadaEAN = ean;
+            oczekiwanieNaNowySkan = true;
+            aparatZatrzymanyPoSkaniu = true;
+
+            try{
+              if(controls){ controls.stop(); controls=null; }
+            }catch(error){ console.error(error); }
+
+            zapiszEAN(ean);
           }
         ).then(()=>{
           startButton.style.display = "none";
           stopButton.style.display = "block";
-          ustawStatus("Aparat działa. Skieruj go na kod EAN.");
+          if(tryb === "trigger") ustawTryb("trigger");
+          else ustawStatus("Aparat działa. Skieruj go na kod EAN.");
         }).catch(error=>{
           console.error(error);
           ustawStatus("Nie udało się uruchomić aparatu. Sprawdź uprawnienia do aparatu.", true);
@@ -135,28 +230,110 @@
         if(controls){controls.stop();controls=null;}
         if(codeReader) codeReader.reset();
       }catch(error){console.error(error)}
+
       video.srcObject = null;
       startButton.style.display = "block";
       stopButton.style.display = "none";
+      triggerButton.style.display = "none";
+      nowyButton.style.display = "none";
+      gotowy.style.display = "none";
+      oczekujacyEAN = "";
+      blokadaEAN = "";
+      zapisWToku = false;
       ustawStatus("Aparat zatrzymany.");
     }
 
-    function obsluzEAN(ean){
-      ustawStatus("Odczytano EAN: " + ean + ". Zapisuję do arkusza...");
+    function nowySkan(){
+      oczekujacyEAN = "";
+      blokadaEAN = "";
+      ostatniOdczytEAN = "";
+      oczekiwanieNaNowySkan = false;
+      aparatZatrzymanyPoSkaniu = false;
+      wyczyscWynik();
+      nowyButton.style.display = "none";
+      gotowy.style.display = "none";
+      triggerButton.disabled = true;
+
+      if(tryb === "auto"){
+        uruchomSkaner();
+      }else{
+        ustawStatus("Skieruj aparat na kolejny kod.");
+      }
+    }
+
+
+    async function odczytajZeZdjecia(file){
+      if(!file) return;
+      if(zapisWToku){
+        ustawStatus("Poprzedni zapis jeszcze trwa. Poczekaj chwilę.", true);
+        return;
+      }
+
+      wyczyscWynik();
+      oczekujacyEAN = "";
+      triggerButton.disabled = true;
+      ustawStatus("Analizuję wybrane zdjęcie... Proszę chwilę poczekać.");
+
+      try{
+        if(typeof ZXingBrowser === "undefined") throw new Error("Biblioteka skanera nie została załadowana.");
+
+        const reader = new ZXingBrowser.BrowserMultiFormatReader();
+        const url = URL.createObjectURL(file);
+        try{
+          const result = await reader.decodeFromImageUrl(url);
+          const tekst = result.getText();
+          const ean = String(tekst || "").replace(/\D/g, "");
+
+          if(!ean){
+            throw new Error("Nie znaleziono poprawnego kodu EAN na zdjęciu.");
+          }
+
+          oczekujacyEAN = ean;
+          ostatniOdczytEAN = ean;
+          if(navigator.vibrate) navigator.vibrate(70);
+
+          if(tryb === "trigger"){
+            triggerButton.disabled = false;
+            gotowy.style.display = "block";
+            ustawStatus("Odczytano EAN ze zdjęcia: " + ean + ". Ustaw ilość i naciśnij wyzwalacz.");
+          }else{
+            oczekiwanieNaNowySkan = true;
+            await zapiszEAN(ean);
+            nowyButton.style.display = "block";
+          }
+        } finally {
+          URL.revokeObjectURL(url);
+        }
+      }catch(error){
+        console.error(error);
+        ustawStatus("Nie udało się odczytać kodu EAN ze zdjęcia. Spróbuj zdjęcia z kodem wyraźnie widocznym i dobrze oświetlonym.", true);
+      }
+    }
+
+    function zapiszEAN(ean){
+      if(!ean || zapisWToku) return;
+
+      const liczbaSzt = pobierzIlosc();
+      zapisWToku = true;
+      triggerButton.disabled = true;
+      gotowy.style.display = "none";
+      ustawStatus("EAN: " + ean + ". Zapisuję ilość " + liczbaSzt + " do arkusza...");
+
       if(navigator.vibrate) navigator.vibrate(100);
 
       if(APPS_SCRIPT_URL.indexOf("TU_WSTAWIMY") === 0){
+        zapisWToku = false;
         ustawStatus("Skaner działa, ale trzeba jeszcze podłączyć arkusz.", true);
         return;
       }
 
-      // JSONP pozwala połączyć zewnętrzną stronę z Apps Script bez problemu CORS.
-      const callbackName = "wynikSkanera_" + Date.now();
+      const callbackName = "wynikSkanera_" + Date.now() + "_" + Math.floor(Math.random()*10000);
       const script = document.createElement("script");
       const timeout = setTimeout(()=>{
         cleanup();
+        zapisWToku = false;
         ustawStatus("Brak odpowiedzi z arkusza. Sprawdź połączenie.", true);
-      }, 15000);
+      }, 20000);
 
       function cleanup(){
         clearTimeout(timeout);
@@ -166,25 +343,63 @@
 
       window[callbackName] = function(dane){
         cleanup();
+        zapisWToku = false;
+
         if(dane && dane.error){
           ustawStatus("Błąd: " + dane.error, true);
+          if(tryb === "trigger") triggerButton.disabled = false;
           return;
         }
+
         pokazWynik(dane || {});
-        ustawStatus("✓ Produkt został zapisany.");
+
+        if(tryb === "trigger"){
+          // Po zapisaniu blokujemy dalsze automatyczne odczyty, aż użytkownik
+          // świadomie naciśnie NOWY SKAN.
+          oczekujacyEAN = "";
+          oczekiwanieNaNowySkan = true;
+          triggerButton.disabled = true;
+          nowyButton.style.display = "block";
+          ustawStatus("✓ Zapisano pobranie. Ustaw ilość i naciśnij NOWY SKAN.");
+        } else {
+          // W AUTO ten sam kod nie zostanie ponownie zapisany,
+          // nawet jeśli pozostaje cały czas przed kamerą.
+          nowyButton.style.display = "block";
+          ustawStatus("✓ Zapisano pobranie. Kamera zatrzymana. Naciśnij NOWY SKAN przed kolejnym zapisem.");
+        }
       };
 
       script.onerror = function(){
         cleanup();
+        zapisWToku = false;
         ustawStatus("Nie udało się połączyć z arkuszem.", true);
+        if(tryb === "trigger") triggerButton.disabled = false;
       };
 
-      script.src = APPS_SCRIPT_URL + "?ean=" + encodeURIComponent(ean) + "&callback=" + encodeURIComponent(callbackName);
+      script.src = APPS_SCRIPT_URL
+        + "?ean=" + encodeURIComponent(ean)
+        + "&ilosc=" + encodeURIComponent(liczbaSzt)
+        + "&callback=" + encodeURIComponent(callbackName);
+
       document.body.appendChild(script);
     }
 
+    trybAutoButton.addEventListener("click", ()=>ustawTryb("auto"));
+    trybTriggerButton.addEventListener("click", ()=>ustawTryb("trigger"));
     startButton.addEventListener("click", uruchomSkaner);
     stopButton.addEventListener("click", zatrzymajSkaner);
+    zdjecieButton.addEventListener("click", ()=>plikZdjecia.click());
+    plikZdjecia.addEventListener("change", ()=>{
+      const file = plikZdjecia.files && plikZdjecia.files[0];
+      odczytajZeZdjecia(file);
+      plikZdjecia.value = "";
+    });
+    nowyButton.addEventListener("click", nowySkan);
+    triggerButton.addEventListener("click", ()=>{
+      if(oczekujacyEAN) zapiszEAN(oczekujacyEAN);
+    });
+
+    ustawTryb("auto");
   </script>
 </body>
 </html>
