@@ -437,6 +437,12 @@
       if(!ean || zapisWToku) return;
 
       const liczbaSzt = pobierzIlosc();
+
+      // Jeden świadomie rozpoczęty zapis = jeden unikalny identyfikator.
+      const scanId =
+        Date.now().toString(36) + "_" +
+        Math.random().toString(36).slice(2, 10);
+
       zapisWToku = true;
       triggerButton.disabled = true;
       gotowy.style.display = "none";
@@ -502,6 +508,7 @@
       script.src = APPS_SCRIPT_URL
         + "?ean=" + encodeURIComponent(ean)
         + "&ilosc=" + encodeURIComponent(liczbaSzt)
+        + "&scanId=" + encodeURIComponent(scanId)
         + "&callback=" + encodeURIComponent(callbackName);
 
       document.body.appendChild(script);
