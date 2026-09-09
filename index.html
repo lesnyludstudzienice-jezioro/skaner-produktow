@@ -61,6 +61,8 @@
   <input id="plikZdjecia" type="file" accept="image/*" style="display:none">
   <button id="trigger" disabled>🎯 ZAPISZ ODCZYTANY KOD</button>
   <button id="nowy">NOWY SKAN</button>
+  <button id="whatsapp" style="display:none">📲 UDOSTĘPNIJ EAN + ILOŚĆ</button>
+  <button id="whatsappNumer" style="display:none">⚙️ USTAW NUMER SKLEPU</button>
 
   <div id="gotowy">Kod odczytany. Naciśnij „ZAPISZ ODCZYTANY KOD”.</div>
   <div id="status">Naciśnij „URUCHOM APARAT”.</div>
@@ -74,6 +76,7 @@
   </div>
 
   <script src="https://unpkg.com/@zxing/browser@latest"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
   <script>
     const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzwhMXZoV3auxdb_mz1PqHQOg4-vsS6q1pLxUg9OwWett9gpN4NzGeClkYeB8zez7Jl9g/exec";
 
@@ -105,6 +108,118 @@
     const ilosc = document.getElementById("ilosc");
     const arkusz = document.getElementById("arkusz");
     const data = document.getElementById("data");
+    const whatsappButton = document.getElementById("whatsapp");
+    const whatsappNumerButton = document.getElementById("whatsappNumer");
+
+    let ostatnieDaneDoWhatsApp = null;
+
+    function pobierzNumerWhatsApp(){
+      return localStorage.getItem("numerWhatsAppSklepu") || "";
+    }
+
+    function ustawNumerWhatsApp(){
+      const obecny = pobierzNumerWhatsApp();
+      const numer = prompt(
+        "Podaj numer WhatsApp sklepu w formacie międzynarodowym, np. 48500100200",
+        obecny
+      );
+      if(numer === null) return;
+      const czysty = numer.replace(/\D/g, "");
+      if(czysty.length < 9){
+        alert("Numer jest za krótki. Wpisz numer z kierunkowym kraju, np. 48500100200.");
+        return;
+      }
+      localStorage.setItem("numerWhatsAppSklepu", czysty);
+      ustawStatus("✓ Zapisano numer WhatsApp sklepu: +" + czysty);
+    }
+
+    function przygotujObrazEAN(ean, liczbaSzt){
+      return new Promise((resolve, reject)=>{
+        if(typeof JsBarcode === "undefined"){
+          reject(new Error("Nie udało się załadować generatora kodu kreskowego."));
+          return;
+        }
+
+        const canvas = document.createElement("canvas");
+        canvas.width = 1000;
+        canvas.height = 430;
+
+        try{
+          JsBarcode(canvas, ean, {
+            format: "EAN13",
+            width: 4,
+            height: 230,
+            margin: 25,
+            displayValue: true,
+            fontSize: 34,
+            textMargin: 8
+          });
+        }catch(e){
+          reject(new Error("Nie można wygenerować kodu EAN. Odczytany kod: " + ean));
+          return;
+        }
+
+        const finalCanvas = document.createElement("canvas");
+        finalCanvas.width = 1000;
+        finalCanvas.height = 520;
+        const ctx = finalCanvas.getContext("2d");
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0,0,1000,520);
+        ctx.drawImage(canvas, 0, 20, 1000, 360);
+        ctx.fillStyle = "#000000";
+        ctx.font = "bold 48px Arial";
+        ctx.textAlign = "center";
+        ctx.fillText("ILOŚĆ: " + liczbaSzt + " SZT.", 500, 460);
+
+        finalCanvas.toBlob(blob=>{
+          if(!blob){
+            reject(new Error("Nie udało się przygotować obrazka."));
+            return;
+          }
+          resolve(new File([blob], "EAN-" + ean + ".png", {type:"image/png"}));
+        }, "image/png");
+      });
+    }
+
+    async function udostepnijEANWhatsApp(){
+      if(!ostatnieDaneDoWhatsApp) return;
+      const dane = ostatnieDaneDoWhatsApp;
+      const numer = pobierzNumerWhatsApp();
+      if(!numer){
+        ustawNumerWhatsApp();
+        return;
+      }
+
+      ustawStatus("Przygotowuję obraz EAN do WhatsApp...");
+      try{
+        const file = await przygotujObrazEAN(dane.ean, dane.ilosc);
+        const tekst = "ILOŚĆ: " + dane.ilosc + " SZT.";
+
+        if(navigator.share && (!navigator.canShare || navigator.canShare({files:[file]}))){
+          await navigator.share({
+            files: [file],
+            text: tekst,
+            title: "EAN " + dane.ean
+          });
+          ustawStatus("✓ Obraz EAN został przekazany do udostępniania. Wybierz WhatsApp i sklep.");
+        }else{
+          const url = URL.createObjectURL(file);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = file.name;
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          setTimeout(()=>URL.revokeObjectURL(url), 3000);
+          window.open("https://wa.me/" + numer + "?text=" + encodeURIComponent(tekst), "_blank");
+          ustawStatus("✓ Zapisano obraz EAN. WhatsApp został otwarty — dołącz zapisany obraz i wyślij.");
+        }
+      }catch(error){
+        console.error(error);
+        if(error && error.name === "AbortError") return;
+        ustawStatus("Nie udało się udostępnić obrazu EAN. Spróbuj ponownie.", true);
+      }
+    }
 
     function ustawStatus(tekst, blad=false){
       status.textContent = tekst;
@@ -121,6 +236,9 @@
     }
 
     function pokazWynik(dane){
+      ostatnieDaneDoWhatsApp = dane;
+      whatsappButton.style.display = "block";
+      whatsappNumerButton.style.display = "block";
       wynik.style.display = "block";
       produkt.textContent = dane.produkt || "Produkt nierozpoznany";
       eanElement.textContent = dane.ean || "-";
@@ -131,6 +249,9 @@
 
     function wyczyscWynik(){
       wynik.style.display = "none";
+      whatsappButton.style.display = "none";
+      whatsappNumerButton.style.display = "none";
+      ostatnieDaneDoWhatsApp = null;
       produkt.textContent = "-";
       eanElement.textContent = "-";
       ilosc.textContent = "-";
@@ -395,6 +516,8 @@
       plikZdjecia.value = "";
     });
     nowyButton.addEventListener("click", nowySkan);
+    whatsappButton.addEventListener("click", udostepnijEANWhatsApp);
+    whatsappNumerButton.addEventListener("click", ustawNumerWhatsApp);
     triggerButton.addEventListener("click", ()=>{
       if(oczekujacyEAN) zapiszEAN(oczekujacyEAN);
     });
