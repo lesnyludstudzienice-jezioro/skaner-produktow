@@ -65,8 +65,6 @@
   <button id="nowy">NOWY SKAN</button>
   <button id="whatsapp">📲 UDOSTĘPNIJ EAN + ILOŚĆ</button>
   <button id="numerWhatsapp">⚙️ USTAW NUMER SKLEPU</button>
-  <button id="whatsapp" style="display:none">📲 UDOSTĘPNIJ EAN + ILOŚĆ</button>
-  <button id="whatsappNumer" style="display:none">⚙️ USTAW NUMER SKLEPU</button>
 
   <div id="gotowy">Kod odczytany. Naciśnij „ZAPISZ ODCZYTANY KOD”.</div>
   <div id="status">Naciśnij „URUCHOM APARAT”.</div>
@@ -114,8 +112,6 @@
     const data = document.getElementById("data");
     const whatsappButton = document.getElementById("whatsapp");
     const numerWhatsappButton = document.getElementById("numerWhatsapp");
-    const whatsappButton = document.getElementById("whatsapp");
-    const whatsappNumerButton = document.getElementById("whatsappNumer");
 
     let ostatnieDaneDoWhatsApp = null;
 
@@ -254,80 +250,10 @@
     }
 
     
-    function pobierzNumerSklepu(){
-      return localStorage.getItem("numerWhatsappSklepu") || "";
-    }
-
-    function ustawNumerSklepu(){
-      const obecny = pobierzNumerSklepu();
-      const numer = prompt("Podaj numer WhatsApp sklepu, np. 48500100200", obecny);
-      if(numer === null) return;
-      const czysty = numer.replace(/\D/g, "");
-      if(czysty.length < 8){
-        alert("Numer jest za krótki. Wpisz pełny numer z kierunkowym, np. 48500100200.");
-        return;
-      }
-      localStorage.setItem("numerWhatsappSklepu", czysty);
-      ustawStatus("✓ Numer WhatsApp sklepu zapisany: +" + czysty);
-    }
-
-    function utworzObrazEAN(ean, liczbaSzt){
-      return new Promise((resolve, reject)=>{
-        const canvas = document.createElement("canvas");
-        const ctx = canvas.getContext("2d");
-        const szer = 1000, wys = 430;
-        canvas.width = szer; canvas.height = wys;
-        ctx.fillStyle = "white"; ctx.fillRect(0,0,szer,wys);
-        ctx.fillStyle = "black";
-        ctx.textAlign = "center";
-        ctx.font = "bold 38px Arial";
-        ctx.fillText("EAN: " + ean, szer/2, 55);
-        const img = new Image();
-        img.onload = ()=>{
-          const maxW=900, maxH=220;
-          const scale=Math.min(maxW/img.width,maxH/img.height);
-          const w=img.width*scale, h=img.height*scale;
-          ctx.drawImage(img,(szer-w)/2,75,w,h);
-          ctx.font = "bold 58px Arial";
-          ctx.fillText("ILOŚĆ: " + liczbaSzt + " SZT.", szer/2, 380);
-          canvas.toBlob(blob=>blob ? resolve(blob) : reject(new Error("Nie udało się przygotować obrazu.")), "image/png");
-        };
-        img.onerror=()=>reject(new Error("Nie udało się przygotować kodu EAN."));
-        const svg = `https://barcode.tec-it.com/barcode.ashx?data=${encodeURIComponent(ean)}&code=EAN13&translate-esc=on`;
-        img.src=svg;
-      });
-    }
-
-    async function udostepnijWhatsApp(){
-      const ean = eanElement.textContent.trim();
-      const liczbaSzt = ilosc.textContent.trim();
-      if(!ean || ean === "-"){ alert("Najpierw wykonaj i zapisz skan."); return; }
-      try{
-        const blob = await utworzObrazEAN(ean, liczbaSzt);
-        const plik = new File([blob], "EAN-"+ean+".png", {type:"image/png"});
-        const tekst = "ILOŚĆ: " + liczbaSzt + " SZT.";
-        if(navigator.share && (!navigator.canShare || navigator.canShare({files:[plik]}))){
-          await navigator.share({files:[plik], text:tekst, title:"EAN " + ean});
-          ustawStatus("✓ Udostępniono. Wybierz WhatsApp i sklep.");
-        }else{
-          const url=URL.createObjectURL(blob);
-          const a=document.createElement("a"); a.href=url; a.download=plik.name; a.click();
-          setTimeout(()=>URL.revokeObjectURL(url),2000);
-          const numer=pobierzNumerSklepu();
-          if(numer) window.open("https://wa.me/"+numer+"?text="+encodeURIComponent(tekst),"_blank");
-          ustawStatus("Obraz EAN zapisany. Dodaj go ręcznie w WhatsApp.");
-        }
-      }catch(e){
-        console.error(e);
-        if(e.name === "AbortError") return;
-        ustawStatus("Nie udało się przygotować udostępnienia WhatsApp.", true);
-      }
-    }
-
     function wyczyscWynik(){
       wynik.style.display = "none";
       whatsappButton.style.display = "none";
-      whatsappNumerButton.style.display = "none";
+      numerWhatsappButton.style.display = "none";
       ostatnieDaneDoWhatsApp = null;
       produkt.textContent = "-";
       eanElement.textContent = "-";
@@ -598,16 +524,39 @@
     }
 
     function rozpoznajProduktWTle(ean, wiersz, scanId){
+      // Najpierw szybkie wyszukanie w bieżącym i historycznych arkuszach.
+      // Internet jest uruchamiany dopiero wtedy, gdy lokalnie nie ma nazwy.
+      wykonajRozpoznanie(ean, wiersz, scanId, "resolveLocal", function(daneLokalne){
+        if(daneLokalne && daneLokalne.produkt){
+          pokazWynik({ean:daneLokalne.ean || ean, produkt:daneLokalne.produkt, ilosc:ilosc.textContent.trim(), arkusz:daneLokalne.arkusz || ""});
+          ustawStatus("✓ Zapisano. Rozpoznano: " + daneLokalne.produkt);
+          odswiezPodsumowanieWTle();
+          return;
+        }
+        // Brak nazwy w arkuszach — dopiero teraz próbujemy Internetu.
+        wykonajRozpoznanie(ean, wiersz, scanId, "resolveInternet", function(daneInternet){
+          if(daneInternet && daneInternet.produkt){
+            pokazWynik({ean:daneInternet.ean || ean, produkt:daneInternet.produkt, ilosc:ilosc.textContent.trim(), arkusz:daneInternet.arkusz || ""});
+            if(String(daneInternet.status || "").indexOf("OK_") === 0){
+              ustawStatus("✓ Zapisano. Rozpoznano: " + daneInternet.produkt);
+            }
+            odswiezPodsumowanieWTle();
+          }
+        });
+      });
+    }
+
+    function wykonajRozpoznanie(ean, wiersz, scanId, action, onDone){
       const callbackName = "rozpoznanieSkanera_" + Date.now() + "_" + Math.floor(Math.random()*10000);
       const script = document.createElement("script");
       let zakonczone = false;
-
       const timeout = setTimeout(()=>{
+        if(zakonczone) return;
         zakonczone = true;
         cleanup();
-        // Zapis skanu już się udał, więc timeout rozpoznania NIE jest błędem skanu.
-        console.warn("Rozpoznanie produktu trwało zbyt długo.");
-      }, 30000);
+        console.warn("Rozpoznanie " + action + " trwało zbyt długo.");
+        if(action === "resolveLocal" && onDone) onDone({status:"TIMEOUT_LOCAL"});
+      }, action === "resolveLocal" ? 10000 : 30000);
 
       function cleanup(){
         clearTimeout(timeout);
@@ -619,37 +568,38 @@
         if(zakonczone) return;
         zakonczone = true;
         cleanup();
-
         if(dane && dane.error){
           console.warn("Rozpoznanie produktu: " + dane.error);
+          if(action === "resolveLocal" && onDone) onDone({status:"ERROR_LOCAL"});
           return;
         }
-
-        // Jeżeli nazwa została znaleziona, odświeżamy wynik na telefonie.
-        if(dane && dane.produkt){
-          pokazWynik({
-            ean: dane.ean || ean,
-            produkt: dane.produkt,
-            arkusz: dane.arkusz || ""
-          });
-          ustawStatus("✓ Zapisano. Rozpoznano: " + dane.produkt);
-        }
+        if(onDone) onDone(dane || {});
       };
 
       script.onerror = function(){
         if(zakonczone) return;
         zakonczone = true;
         cleanup();
-        console.warn("Nie udało się pobrać nazwy produktu. Skan pozostaje zapisany w arkuszu.");
+        console.warn("Nie udało się pobrać odpowiedzi " + action + ".");
+        if(action === "resolveLocal" && onDone) onDone({status:"ERROR_LOCAL"});
       };
 
       script.src = APPS_SCRIPT_URL
-        + "?action=resolve"
+        + "?action=" + encodeURIComponent(action)
         + "&ean=" + encodeURIComponent(ean)
         + "&wiersz=" + encodeURIComponent(wiersz)
         + "&scanId=" + encodeURIComponent(scanId)
         + "&callback=" + encodeURIComponent(callbackName);
+      document.body.appendChild(script);
+    }
 
+    function odswiezPodsumowanieWTle(){
+      const callbackName = "podsumowanieSkanera_" + Date.now() + "_" + Math.floor(Math.random()*10000);
+      const script = document.createElement("script");
+      const timeout = setTimeout(()=>{ delete window[callbackName]; script.remove(); }, 20000);
+      window[callbackName] = function(){ clearTimeout(timeout); delete window[callbackName]; script.remove(); };
+      script.onerror = function(){ clearTimeout(timeout); delete window[callbackName]; script.remove(); };
+      script.src = APPS_SCRIPT_URL + "?action=refreshSummary&callback=" + encodeURIComponent(callbackName);
       document.body.appendChild(script);
     }
 
@@ -665,9 +615,7 @@
     });
     nowyButton.addEventListener("click", nowySkan);
     whatsappButton.addEventListener("click", udostepnijEANWhatsApp);
-    whatsappNumerButton.addEventListener("click", ustawNumerWhatsApp);
-    whatsappButton.addEventListener("click", udostepnijWhatsApp);
-    numerWhatsappButton.addEventListener("click", ustawNumerSklepu);
+    numerWhatsappButton.addEventListener("click", ustawNumerWhatsApp);
     triggerButton.addEventListener("click", ()=>{
       if(oczekujacyEAN) zapiszEAN(oczekujacyEAN);
     });
