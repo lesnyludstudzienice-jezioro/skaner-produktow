@@ -36,6 +36,10 @@
     .ok{color:#16803c;font-weight:bold}
     #ean{font-family:monospace;font-size:17px}
     #gotowy{display:none;max-width:500px;margin:10px auto 0;padding:12px;border-radius:10px;background:#fff3cd;font-weight:bold}
+    #kodPanel{display:none;max-width:500px;margin:12px auto 0;padding:14px;border-radius:12px;background:#fff;text-align:center}
+    #kodPanel .kodTytul{font-weight:bold;font-size:18px;margin-bottom:8px}
+    #kodKreskowy{width:100%;height:auto;max-width:460px}
+    #kodOpis{margin-top:6px;font-family:monospace;font-size:17px}
   </style>
 </head>
 <body>
@@ -68,6 +72,12 @@
 
   <div id="gotowy">Kod odczytany. Naciśnij „ZAPISZ ODCZYTANY KOD”.</div>
   <div id="status">Naciśnij „URUCHOM APARAT”.</div>
+
+  <div id="kodPanel">
+    <div class="kodTytul">KOD KRESKOWY DO UDOSTĘPNIENIA</div>
+    <svg id="kodKreskowy"></svg>
+    <div id="kodOpis">-</div>
+  </div>
 
   <div id="wynik">
     <div id="produkt">-</div>
@@ -112,6 +122,9 @@
     const data = document.getElementById("data");
     const whatsappButton = document.getElementById("whatsapp");
     const numerWhatsappButton = document.getElementById("numerWhatsapp");
+    const kodPanel = document.getElementById("kodPanel");
+    const kodKreskowy = document.getElementById("kodKreskowy");
+    const kodOpis = document.getElementById("kodOpis");
 
     let ostatnieDaneDoWhatsApp = null;
 
@@ -237,16 +250,47 @@
       return Math.round(wartosc * 100) / 100;
     }
 
+    function pokazKodKreskowy(ean, liczbaSzt){
+      if(!ean || typeof JsBarcode === "undefined"){
+        kodPanel.style.display = "none";
+        return;
+      }
+
+      try{
+        const format = String(ean).length === 8 ? "EAN8" : "EAN13";
+        kodKreskowy.innerHTML = "";
+        JsBarcode(kodKreskowy, ean, {
+          format: format,
+          width: 3,
+          height: 150,
+          margin: 10,
+          displayValue: true,
+          fontSize: 22,
+          textMargin: 5
+        });
+        kodOpis.textContent = "EAN: " + ean + "   |   ILOŚĆ: " + liczbaSzt + " SZT.";
+        kodPanel.style.display = "block";
+      }catch(error){
+        console.error(error);
+        kodPanel.style.display = "none";
+      }
+    }
+
+
     function pokazWynik(dane){
       ostatnieDaneDoWhatsApp = dane;
       whatsappButton.style.display = "block";
-      whatsappNumerButton.style.display = "block";
+      numerWhatsappButton.style.display = "block";
       wynik.style.display = "block";
       produkt.textContent = dane.produkt || "Produkt nierozpoznany";
       eanElement.textContent = dane.ean || "-";
       ilosc.textContent = dane.ilosc !== undefined ? dane.ilosc : "-";
       arkusz.textContent = dane.arkusz || "-";
       data.textContent = dane.data || "-";
+
+      // Kod kreskowy jest generowany od razu po odczycie/zapisie EAN,
+      // niezależnie od tego, czy produkt został rozpoznany w arkuszu.
+      pokazKodKreskowy(dane.ean || "", dane.ilosc !== undefined ? dane.ilosc : pobierzIlosc());
     }
 
     
@@ -254,6 +298,9 @@
       wynik.style.display = "none";
       whatsappButton.style.display = "none";
       numerWhatsappButton.style.display = "none";
+      kodPanel.style.display = "none";
+      kodKreskowy.innerHTML = "";
+      kodOpis.textContent = "-";
       ostatnieDaneDoWhatsApp = null;
       produkt.textContent = "-";
       eanElement.textContent = "-";
