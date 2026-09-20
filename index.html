@@ -485,8 +485,8 @@
         pokazWynik(dane || {});
 
         // Najważniejsze: zapis został już wykonany.
-        // Nie czekamy na wyszukanie nazwy produktu.
-        // Wysyłamy osobne żądanie rozpoznania w tle.
+        // Nazwę szukamy tylko w arkuszu bieżącym/poprzednich.
+        // Jeżeli jej nie ma, użytkownik wpisuje ją ręcznie.
         if (dane && dane.wiersz) {
           rozpoznajProduktWTle(ean, dane.wiersz, scanId);
         }
@@ -524,25 +524,18 @@
     }
 
     function rozpoznajProduktWTle(ean, wiersz, scanId){
-      // Najpierw szybkie wyszukanie w bieżącym i historycznych arkuszach.
-      // Internet jest uruchamiany dopiero wtedy, gdy lokalnie nie ma nazwy.
+      // Szukamy wyłącznie w bieżącym i poprzednich arkuszach.
+      // Internet NIE jest używany. Jeżeli nazwy nie ma w historii,
+      // użytkownik musi wpisać ją ręcznie w kolumnie B.
       wykonajRozpoznanie(ean, wiersz, scanId, "resolveLocal", function(daneLokalne){
-        if(daneLokalne && daneLokalne.produkt){
+        if(daneLokalne && daneLokalne.produkt && String(daneLokalne.produkt).indexOf("⚠ BRAK NAZWY") !== 0){
           pokazWynik({ean:daneLokalne.ean || ean, produkt:daneLokalne.produkt, ilosc:ilosc.textContent.trim(), arkusz:daneLokalne.arkusz || ""});
           ustawStatus("✓ Zapisano. Rozpoznano: " + daneLokalne.produkt);
-          odswiezPodsumowanieWTle();
-          return;
+        } else {
+          pokazWynik({ean:ean, produkt:"⚠ BRAK NAZWY — WPISZ WŁAŚCIWĄ NAZWĘ ARTYKUŁU", ilosc:ilosc.textContent.trim(), arkusz:(daneLokalne && daneLokalne.arkusz) || ""});
+          ustawStatus("⚠ Nie znaleziono EAN w bieżącym ani poprzednich arkuszach. Wpisz nazwę produktu ręcznie w kolumnie B.", true);
         }
-        // Brak nazwy w arkuszach — dopiero teraz próbujemy Internetu.
-        wykonajRozpoznanie(ean, wiersz, scanId, "resolveInternet", function(daneInternet){
-          if(daneInternet && daneInternet.produkt){
-            pokazWynik({ean:daneInternet.ean || ean, produkt:daneInternet.produkt, ilosc:ilosc.textContent.trim(), arkusz:daneInternet.arkusz || ""});
-            if(String(daneInternet.status || "").indexOf("OK_") === 0){
-              ustawStatus("✓ Zapisano. Rozpoznano: " + daneInternet.produkt);
-            }
-            odswiezPodsumowanieWTle();
-          }
-        });
+        odswiezPodsumowanieWTle();
       });
     }
 
